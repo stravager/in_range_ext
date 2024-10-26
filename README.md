@@ -2,10 +2,10 @@
 
 This header provides an equivalent to C++20's ```std::in_range<integer>(value)``` for floating-point values.
 
-It defines
+It defines the function
 ```
 namespace in_range_ext {
-  template<integer I, std::floating_point F> constexpr bool in_range(F f)
+  template<integer I, std::floating_point F> constexpr bool in_range(F f);
 }
 ```
 which returns true iff the floating-point value ```f``` is in range for integer type ```I```.
