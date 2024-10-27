@@ -1,3 +1,4 @@
+//
 // This header provides an equivalent to C++20's std::in_range<integer>(value) for floating-point values.
 //
 // It defines the following in namespace in_range_ext
@@ -31,8 +32,9 @@
 // including the common cases where the floating-point range is much larger, and less common ones
 // where it may be smaller, for example IEEE half-precision aka binary16.
 //
-// ---
-// 
+// -------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+//
 // MIT License
 // 
 // Copyright (c) 2024 stravager
