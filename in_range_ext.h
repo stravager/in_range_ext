@@ -1,4 +1,3 @@
-//
 // This header provides an equivalent to C++20's std::in_range<integer>(value) for floating-point values.
 //
 // It defines the following in namespace in_range_ext
@@ -31,6 +30,30 @@
 // It is designed to work for arbitrary integer width, floating-point radix, and precision,
 // including the common cases where the floating-point range is much larger, and less common ones
 // where it may be smaller, for example IEEE half-precision aka binary16.
+//
+// ---
+// 
+// MIT License
+// 
+// Copyright (c) 2024 stravager
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 //
 
 #ifndef IN_RANGE_EXT_H
@@ -287,7 +310,7 @@ template <int radix, integer I> constexpr int count_digits(I i)
 
 // Helper class for converting floating_point values to and from the decomposed
 // representation; and converting from integer, truncating to F's precision if needed.
-// (Conversion TO intger is not supported and not needed here).
+// (Conversion TO integer is not supported and not needed here).
 template <std::floating_point F> class decomp
 {
     using float_limits = std::numeric_limits<F>;
