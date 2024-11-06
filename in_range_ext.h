@@ -36,19 +36,19 @@
 // -------------------------------------------------------------------------------------------------
 //
 // MIT License
-// 
+//
 // Copyright (c) 2024 stravager
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -311,23 +311,23 @@ template <int radix, integer I> constexpr int count_digits(I i)
 };
 
 // Helper class for converting floating_point values to and from the decomposed
-// representation; and converting from integer, truncating to F's precision if needed.
+// representation; and converting from integer, truncating to specified precision if needed.
 // (Conversion TO integer is not supported and not needed here).
-template <std::floating_point F> class decomp
+template <int radix, int num_digits> class decomp
 {
-    using float_limits = std::numeric_limits<F>;
-    static constexpr int radix = float_limits::radix;
-    static constexpr int num_digits = float_limits::digits;
-
     // Representation.
-    decomp_rep<std::numeric_limits<F>::radix, std::numeric_limits<F>::digits> rep;
+    decomp_rep<radix, num_digits> rep;
 
 public:
     constexpr decomp() = default;
 
-    // Conversion from F.
+    // Conversion from floating_point.
+    template <std::floating_point F>
     constexpr explicit decomp(F f) : rep{.category = constexpr_cmath::fpclassify(f), .signbit = constexpr_cmath::signbit(f), .ilogb = constexpr_cmath::ilogb(f)}
     {
+        using flimits = std::numeric_limits<F>;
+        static_assert(flimits::radix == radix);
+
         // Need extra handling below if fpclassify can return any non-standard values.
         IN_RANGE_EXT_ASSERT(rep.category == FP_ZERO || rep.category == FP_SUBNORMAL || rep.category == FP_NORMAL || rep.category == FP_INFINITE ||
                             rep.category == FP_NAN);
@@ -345,7 +345,7 @@ public:
                 f = constexpr_cmath::scalbn(f, -rep.ilogb);
 
             // Extract digits, most significant first.
-            for (int d = 0; d < num_digits; ++d)
+            for (int d = 0; d < std::min(flimits::digits, num_digits); ++d)
             {
                 int digit = static_cast<int>(f);
                 rep.digits[d] = digit;
@@ -358,29 +358,40 @@ public:
     }
 
     // Conversion to F.
-    constexpr explicit operator F() const
+    template <std::floating_point F> constexpr explicit operator F() const
     {
+        using flimits = std::numeric_limits<F>;
+        static_assert(flimits::radix == radix);
+
         F f = 0;
         if (rep.category == FP_ZERO)
             f = 0;
         else if (rep.category == FP_SUBNORMAL || rep.category == FP_NORMAL)
         {
-            for (int d = 0; d < num_digits; ++d)
+            if (rep.ilogb >= flimits::max_exponent)
             {
-                F digit = static_cast<F>(rep.digits[d]);
-                f += constexpr_cmath::scalbn(digit, -d);
+                IN_RANGE_EXT_ASSERT(flimits::has_infinity);
+                f = flimits::infinity();
             }
-            f = constexpr_cmath::scalbn(f, rep.ilogb);
+            else
+            {
+                for (int d = 0; d < std::min(flimits::digits, num_digits); ++d)
+                {
+                    F digit = static_cast<F>(rep.digits[d]);
+                    f += constexpr_cmath::scalbn(digit, -d);
+                }
+                f = constexpr_cmath::scalbn(f, rep.ilogb);
+            }
         }
         else if (rep.category == FP_INFINITE)
         {
-            IN_RANGE_EXT_ASSERT(float_limits::has_infinity);
-            f = float_limits::infinity();
+            IN_RANGE_EXT_ASSERT(flimits::has_infinity);
+            f = flimits::infinity();
         }
         else if (rep.category == FP_NAN)
         {
-            IN_RANGE_EXT_ASSERT(float_limits::has_quiet_NaN);
-            f = float_limits::quiet_NaN();
+            IN_RANGE_EXT_ASSERT(flimits::has_quiet_NaN);
+            f = flimits::quiet_NaN();
         }
 
         if (rep.signbit)
@@ -390,8 +401,7 @@ public:
     }
 
     // Conversion from integer.
-    // Result is truncated, not rounded, to precision of F.
-    // Result is infinite (rep.category == FP_INFINITE) if out of range for F.
+    // Result is truncated, not rounded, to num_digits of precision.
     template <integer I>
     constexpr explicit decomp(I i)
         : rep{
@@ -411,22 +421,11 @@ public:
         // Extract digits, least significant first.
         for (int d = idigits - 1; d >= 0; --d)
         {
-            if (d < num_digits) // Drop digits beyond F's precision.
+            if (d < num_digits) // Drop digits beyond specified precision.
                 rep.digits[d] = u % radix;
             u /= radix;
         }
         rep.ilogb = idigits - 1;
-
-        // Handle integer values out of range for F, most likely to be encountered with
-        // small floating-point types like IEEE binary16 (max absolute value = 65504).
-        constexpr decomp<F> dfmin(float_limits::lowest());
-        constexpr decomp<F> dfmax(float_limits::max());
-        if (*this < dfmin || dfmax < *this)
-        {
-            rep.category = FP_INFINITE;
-            rep.ilogb = 0;
-            rep.digits = {};
-        }
     }
 
     friend constexpr bool operator<(const decomp &lhs, const decomp &rhs)
@@ -436,8 +435,8 @@ public:
 };
 
 // Verify round-trip on some basic values.
-using dfloat = decomp<float>;
 using float_limits = std::numeric_limits<float>;
+using dfloat = decomp<float_limits::radix, float_limits::digits>;
 constexpr int dfloat_radix = std::numeric_limits<float>::radix;
 
 static_assert(float(dfloat(-0.0f)) == -0.0f && constexpr_cmath::signbit(float(dfloat(-0.0f))));
@@ -458,15 +457,57 @@ static_assert(float(dfloat(-(dfloat_radix - 1))) == -(dfloat_radix - 1));
 static_assert(float(dfloat(+(dfloat_radix - 1))) == +(dfloat_radix - 1));
 } // namespace detail
 
-// Finally can implement in_range itself.
+// in_range<integer>(floating_point)
 template <integer I, std::floating_point F> constexpr bool in_range(F f)
 {
-    using fdecomp = detail::decomp<F>;
     using flimits = std::numeric_limits<F>;
     using ilimits = std::numeric_limits<I>;
+    // Limited to F precision.
+    using fdecomp = detail::decomp<flimits::radix, flimits::digits>;
 
-    constexpr F min_in_range(std::max(fdecomp(flimits::lowest()), fdecomp(ilimits::lowest())));
-    constexpr F max_in_range(std::min(fdecomp(flimits::max()), fdecomp(ilimits::max())));
+    constexpr fdecomp dimin(ilimits::lowest()), dimax(ilimits::max());
+    constexpr fdecomp dfmin(flimits::lowest()), dfmax(flimits::max());
+
+    constexpr F min_in_range(std::max(dfmin, dimin));
+    constexpr F max_in_range(std::min(dfmax, dimax));
+
+    return min_in_range <= f && f <= max_in_range;
+}
+
+// in_range<floating_point>(integer)
+template <std::floating_point F, integer I> constexpr bool in_range(I i)
+{
+    using flimits = std::numeric_limits<F>;
+    using ilimits = std::numeric_limits<I>;
+    // Precision extended as needed to accommodate all integer values.
+    constexpr int fdecomp_digits =
+        std::max({flimits::digits, detail::count_digits<flimits::radix>(ilimits::min()), detail::count_digits<flimits::radix>(ilimits::max())});
+    using fdecomp = detail::decomp<flimits::radix, fdecomp_digits>;
+
+    constexpr fdecomp dimin(ilimits::lowest()), dimax(ilimits::max());
+    constexpr fdecomp dfmin(flimits::lowest()), dfmax(flimits::max());
+
+    constexpr I min_in_range = dimin < dfmin ? I(flimits::lowest()) : ilimits::lowest();
+    constexpr I max_in_range = dfmax < dimax ? I(flimits::max()) : ilimits::max();
+
+    return min_in_range <= i && i <= max_in_range;
+}
+
+// in_range<floating_point>(floating_point) (radices must match or this gets a lot more complicated)
+template <std::floating_point Dst, std::floating_point Src> constexpr bool in_range(Src f)
+{
+    using dlimits = std::numeric_limits<Dst>;
+    using slimits = std::numeric_limits<Src>;
+    static_assert(dlimits::radix == slimits::radix, "radices must match in current implementation");
+    // Precision extended as needed to accommodate both floating point types.
+    constexpr int fdecomp_digits = std::max(dlimits::digits, slimits::digits);
+    using fdecomp = detail::decomp<dlimits::radix, fdecomp_digits>;
+
+    constexpr fdecomp dmin(dlimits::lowest()), dmax(dlimits::max());
+    constexpr fdecomp smin(slimits::lowest()), smax(slimits::max());
+
+    constexpr Src min_in_range(std::max(dmin, smin));
+    constexpr Src max_in_range(std::min(dmax, smax));
 
     return min_in_range <= f && f <= max_in_range;
 }
@@ -490,6 +531,9 @@ static_assert(!float_is_binary32 || !in_range<int64_t>(float(INT64_MAX)));
 static_assert(!double_is_binary64 || in_range<int64_t>(double(INT64_MIN)));
 static_assert(!double_is_binary64 || !in_range<int64_t>(double(INT64_MAX)));
 #endif
+static_assert(!(float_is_binary32 && double_is_binary64) || in_range<double>(FLT_MAX));
+static_assert(!(float_is_binary32 && double_is_binary64) || !in_range<float>(DBL_MAX));
+
 } // namespace detail
 } // namespace in_range_ext
 

@@ -10,10 +10,16 @@ bool in_int_range(double f)
     return in_range_ext::in_range<int>(f);
 }
 
+static_assert(in_range_ext::in_range<float>(INT_MIN));
+static_assert(in_range_ext::in_range<float>(INT_MAX));
+
 int main()
 {
-    using dfloat = in_range_ext::detail::decomp<float>;
+    in_range_ext::in_range<int>(0.0f);
+    in_range_ext::in_range<float>(0);
+
     using flimits = std::numeric_limits<float>;
+    using dfloat = in_range_ext::detail::decomp<flimits::radix, flimits::digits>;
     constexpr int fradix = flimits::radix;
 
     IN_RANGE_EXT_ASSERT(float(dfloat(-0.0f)) == -0.0f && std::signbit(float(dfloat(-0.0f))));
