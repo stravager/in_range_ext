@@ -1,10 +1,12 @@
 #include "in_range_ext.h"
 
+bool in_int_range(float f);
 bool in_int_range(float f)
 {
     return in_range_ext::in_range<int>(f);
 }
 
+bool in_int_range(double f);
 bool in_int_range(double f)
 {
     return in_range_ext::in_range<int>(f);
@@ -42,7 +44,7 @@ int main()
     IN_RANGE_EXT_ASSERT(float(dfloat(-(fradix - 1))) == -(fradix - 1));
     IN_RANGE_EXT_ASSERT(float(dfloat(+(fradix - 1))) == +(fradix - 1));
 
-    if (flimits::radix == 2 && flimits::digits == 24)
+    if constexpr (flimits::radix == 2 && flimits::digits == 24)
     {
         static_assert(int32_t(float(INT32_MIN)) == INT32_MIN);
         static_assert(int32_t(float(0x7fffff80)) == 0x7fffff80);

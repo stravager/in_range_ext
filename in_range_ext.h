@@ -1,5 +1,5 @@
 //
-// This header provides an equivalent to C++20's std::in_range<integer>(value) for floating-point values.
+// This header extends C++20's std::in_range to include floating-point types.
 //
 // It defines the following in namespace in_range_ext
 //
@@ -12,11 +12,20 @@
 //
 //   returns true iff the floating-point value f is in range for integer type I
 //
+// template<std::floating_point F, integer I> constexpr bool in_range(I i)
+//
+//   returns true iff the integer value i is in range for floating-point type F
+//
+// template<std::floating_point FDst, std::floating_point FSrc> constexpr bool in_range(FSrc f)
+//
+//   returns true iff value f (of floating-point type FSrc) is in range for floating-point type FDst
+//   currently limited to pairs of floating-point types with the same radix
+// 
 // -------------------------------------------------------------------------------------------------
 //
-// For this one function, most of the work is in finding, at compile time, the highest and lowest
-// floating-point values in the range of the integer type. This cannot be done by direct conversion
-// in the general case in C++ because of rounding. For example on a typical 32-/64-bit system with
+// In each case most of the work is in finding, at compile time, the highest and lowest values of the
+// "source" type in the range of the "destination" type. This cannot be done by direct conversion in
+// the general case in C++ because of rounding. For example on a typical 32-/64-bit system with
 //
 //   numeric_limits<int>::digits   31
 //   numeric_limits<int>::max()    0x7fffffff (2^31 - 1)
@@ -29,8 +38,8 @@
 // representation.
 //
 // It is designed to work for arbitrary integer width, floating-point radix, and precision,
-// including the common cases where the floating-point range is much larger, and less common ones
-// where it may be smaller, for example IEEE half-precision aka binary16.
+// including the common cases where floating-point range is much larger than integer range, and less
+// common ones where it may be smaller, for example IEEE half-precision aka binary16.
 //
 // -------------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
@@ -88,13 +97,13 @@ namespace constexpr_cmath
 {
 // Need a few constexpr <cmath> functions, but these aren't widely available yet. The
 // substitutes are slow, but only used to compute the compile-time constants.
-#if __cpp_lib_constexpr_cmath >= 202202L
+#if defined __cpp_lib_constexpr_cmath && __cpp_lib_constexpr_cmath >= 202202L
 using std::copysign;
 using std::fpclassify;
 using std::ilogb;
 using std::scalbn;
 using std::signbit;
-#else // !(__cpp_lib_constexpr_cmath >= 202202L)
+#else // !(defined __cpp_lib_constexpr_cmath && __cpp_lib_constexpr_cmath >= 202202L)
 
 // If true, disables forwarding to the std:: equivalents at runtime, for test purposes.
 constexpr bool runtime_test = false;
@@ -105,7 +114,7 @@ template <std::floating_point F> constexpr bool signbit(F f)
         return std::signbit(f);
 
 #if defined __clang__ || defined __GNUC__
-    return __builtin_copysign(F(1.0), f) < 0;
+    return __builtin_copysignl(1.0L, static_cast<long double>(f)) < 0;
 #else
     // Works straightforwardly for subnormal/normal/infinity.
     // Best effort for zero (works assuming no unusual padding).
@@ -115,12 +124,10 @@ template <std::floating_point F> constexpr bool signbit(F f)
 #endif
 }
 
-static_assert(signbit(-float(0)));
-static_assert(signbit(-double(0)));
-static_assert(signbit(-(long double)(0)));
-static_assert(!signbit(+float(0)));
-static_assert(!signbit(+double(0)));
-static_assert(!signbit(+(long double)(0)));
+static_assert( signbit(-0.0));
+static_assert( signbit(-1.0));
+static_assert(!signbit(+0.0));
+static_assert(!signbit(+1.0));
 
 template <std::floating_point F> constexpr F copysign(F f, F s)
 {
@@ -130,26 +137,15 @@ template <std::floating_point F> constexpr F copysign(F f, F s)
     return signbit(f) == signbit(s) ? f : -f;
 }
 
-static_assert(signbit(copysign(float(0), -float(0))));
-static_assert(signbit(copysign(double(0), -double(0))));
-static_assert(signbit(copysign((long double)(0), -(long double)(0))));
-static_assert(!signbit(copysign(-float(0), +float(0))));
-static_assert(!signbit(copysign(-double(0), +double(0))));
-static_assert(!signbit(copysign(-(long double)(0), +(long double)(0))));
+static_assert( signbit(copysign(+0.0, -0.0)));
+static_assert( signbit(copysign(+0.0, -1.0)));
+static_assert( signbit(copysign(+1.0, -0.0)));
+static_assert( signbit(copysign(+1.0, -1.0)));
 
-static_assert(signbit(copysign(float(0), -float(1))));
-static_assert(signbit(copysign(double(0), -double(1))));
-static_assert(signbit(copysign((long double)(0), -(long double)(1))));
-static_assert(!signbit(copysign(-float(0), +float(1))));
-static_assert(!signbit(copysign(-double(0), +double(1))));
-static_assert(!signbit(copysign(-(long double)(0), +(long double)(1))));
-
-static_assert(signbit(copysign(float(1), -float(0))));
-static_assert(signbit(copysign(double(1), -double(0))));
-static_assert(signbit(copysign((long double)(1), -(long double)(0))));
-static_assert(!signbit(copysign(-float(1), +float(0))));
-static_assert(!signbit(copysign(-double(1), +double(0))));
-static_assert(!signbit(copysign(-(long double)(1), +(long double)(0))));
+static_assert(!signbit(copysign(-0.0, +0.0)));
+static_assert(!signbit(copysign(-0.0, +1.0)));
+static_assert(!signbit(copysign(-1.0, +0.0)));
+static_assert(!signbit(copysign(-1.0, +1.0)));
 
 template <std::floating_point F> constexpr int fpclassify(F f)
 {
@@ -213,7 +209,7 @@ template <std::floating_point F> constexpr F scalbn(F f, int exp)
 
     return f;
 }
-#endif // !(__cpp_lib_constexpr_cmath >= 202202L)
+#endif // !(defined __cpp_lib_constexpr_cmath && __cpp_lib_constexpr_cmath >= 202202L)
 } // namespace constexpr_cmath
 
 // Decomposed floating point representation for easier manipulation.
@@ -287,7 +283,7 @@ template <int radix, int num_digits> constexpr bool operator<(const decomp_rep<r
                 return isneg(lhs) ? lhs.ilogb > rhs.ilogb : lhs.ilogb < rhs.ilogb;
             else
             {
-                for (int d = 0; d < num_digits; ++d)
+                for (unsigned d = 0; d < num_digits; ++d)
                     if (lhs.digits[d] != rhs.digits[d])
                         return isneg(lhs) ? lhs.digits[d] > rhs.digits[d] : lhs.digits[d] < rhs.digits[d];
                 return false;
@@ -300,7 +296,7 @@ template <int radix, int num_digits> constexpr bool operator<(const decomp_rep<r
 template <int radix, integer I> constexpr int count_digits(I i)
 {
     using U = std::make_unsigned_t<I>;
-    U u = i < 0 ? U(0) - static_cast<U>(i) : i;
+    U u = i < 0 ? U(0) - static_cast<U>(i) : U(i);
     int num_digits = 1;
     while (u >= radix)
     {
@@ -308,11 +304,11 @@ template <int radix, integer I> constexpr int count_digits(I i)
         u /= radix;
     }
     return num_digits;
-};
+}
 
-// Helper class for converting floating_point values to and from the decomposed
-// representation; and converting from integer, truncating to specified precision if needed.
-// (Conversion TO integer is not supported and not needed here).
+// Helper class for converting floating_point values to and from decomposed representation;
+// and converting from integer, truncating to specified precision if needed. (Conversion TO
+// integer is not supported and not needed here).
 template <int radix, int num_digits> class decomp
 {
     // Representation.
@@ -345,7 +341,7 @@ public:
                 f = constexpr_cmath::scalbn(f, -rep.ilogb);
 
             // Extract digits, most significant first.
-            for (int d = 0; d < std::min(flimits::digits, num_digits); ++d)
+            for (unsigned d = 0; d < unsigned(std::min(flimits::digits, num_digits)); ++d)
             {
                 int digit = static_cast<int>(f);
                 rep.digits[d] = digit;
@@ -377,7 +373,7 @@ public:
             {
                 for (int d = 0; d < std::min(flimits::digits, num_digits); ++d)
                 {
-                    F digit = static_cast<F>(rep.digits[d]);
+                    F digit = static_cast<F>(rep.digits[unsigned(d)]);
                     f += constexpr_cmath::scalbn(digit, -d);
                 }
                 f = constexpr_cmath::scalbn(f, rep.ilogb);
@@ -416,13 +412,13 @@ public:
 
         // Use absolute value for digit extraction.
         using U = std::make_unsigned_t<I>;
-        U u = i < 0 ? U(0) - static_cast<U>(i) : i;
+        U u = i < 0 ? U(0) - static_cast<U>(i) : U(i);
 
         // Extract digits, least significant first.
         for (int d = idigits - 1; d >= 0; --d)
         {
             if (d < num_digits) // Drop digits beyond specified precision.
-                rep.digits[d] = u % radix;
+                rep.digits[unsigned(d)] = u % radix;
             u /= radix;
         }
         rep.ilogb = idigits - 1;
@@ -462,10 +458,10 @@ template <integer I, std::floating_point F> constexpr bool in_range(F f)
 {
     using flimits = std::numeric_limits<F>;
     using ilimits = std::numeric_limits<I>;
-    // Limited to F precision.
+
     using fdecomp = detail::decomp<flimits::radix, flimits::digits>;
 
-    constexpr fdecomp dimin(ilimits::lowest()), dimax(ilimits::max());
+    constexpr fdecomp dimin(ilimits::lowest()), dimax(ilimits::max()); // Truncated (if needed) to F's precision.
     constexpr fdecomp dfmin(flimits::lowest()), dfmax(flimits::max());
 
     constexpr F min_in_range(std::max(dfmin, dimin));
@@ -479,27 +475,44 @@ template <std::floating_point F, integer I> constexpr bool in_range(I i)
 {
     using flimits = std::numeric_limits<F>;
     using ilimits = std::numeric_limits<I>;
-    // Precision extended as needed to accommodate all integer values.
-    constexpr int fdecomp_digits =
-        std::max({flimits::digits, detail::count_digits<flimits::radix>(ilimits::min()), detail::count_digits<flimits::radix>(ilimits::max())});
-    using fdecomp = detail::decomp<flimits::radix, fdecomp_digits>;
+    constexpr F fmin = flimits::lowest(), fmax = flimits::max();
+    constexpr I imin = ilimits::lowest(), imax = ilimits::max();
+    constexpr int fradix = flimits::radix;
 
-    constexpr fdecomp dimin(ilimits::lowest()), dimax(ilimits::max());
-    constexpr fdecomp dfmin(flimits::lowest()), dfmax(flimits::max());
+    // Precision accommodates all finite values of either type.
+    constexpr int fdecomp_digits = std::max({
+        flimits::digits,                    //
+        detail::count_digits<fradix>(imin), //
+        detail::count_digits<fradix>(imax)  //
+    });
+    using fdecomp = detail::decomp<fradix, fdecomp_digits>;
 
-    constexpr I min_in_range = dimin < dfmin ? I(flimits::lowest()) : ilimits::lowest();
-    constexpr I max_in_range = dfmax < dimax ? I(flimits::max()) : ilimits::max();
+    constexpr fdecomp dimin(imin), dimax(imax);
+    constexpr fdecomp dfmin(fmin), dfmax(fmax);
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4056) // warning C4056: overflow in floating-point constant arithmetic
+                                // we're specifically checking for overflow first!
+#endif
+    constexpr I min_in_range = dimin < dfmin ? I(fmin) : imin;
+    constexpr I max_in_range = dfmax < dimax ? I(fmax) : imax;
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     return min_in_range <= i && i <= max_in_range;
 }
 
-// in_range<floating_point>(floating_point) (radices must match or this gets a lot more complicated)
+// in_range<floating_point_dst>(floating_point_src)
+// radix must match for now
 template <std::floating_point Dst, std::floating_point Src> constexpr bool in_range(Src f)
 {
     using dlimits = std::numeric_limits<Dst>;
     using slimits = std::numeric_limits<Src>;
     static_assert(dlimits::radix == slimits::radix, "radices must match in current implementation");
-    // Precision extended as needed to accommodate both floating point types.
+
+    // Precision accommodates all finite values of either type.
     constexpr int fdecomp_digits = std::max(dlimits::digits, slimits::digits);
     using fdecomp = detail::decomp<dlimits::radix, fdecomp_digits>;
 
@@ -514,25 +527,36 @@ template <std::floating_point Dst, std::floating_point Src> constexpr bool in_ra
 
 namespace detail
 {
+
 // Spot check some typical boundaries.
-constexpr bool float_is_binary32 = std::numeric_limits<float>::radix == 2 && std::numeric_limits<float>::digits == 24 && std::numeric_limits<float>::is_iec559;
-constexpr bool double_is_binary64 =
-    std::numeric_limits<double>::radix == 2 && std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::is_iec559;
+constexpr bool float_is_binary32 = std::numeric_limits<float>::radix == 2 && //
+    std::numeric_limits<float>::digits == 24 && std::numeric_limits<float>::is_iec559;
+constexpr bool double_is_binary64 = std::numeric_limits<double>::radix == 2 && //
+    std::numeric_limits<double>::digits == 53 && std::numeric_limits<double>::is_iec559;
 
 #ifdef INT32_MAX
 static_assert(!float_is_binary32 || in_range<int32_t>(float(INT32_MIN)));
 static_assert(!float_is_binary32 || !in_range<int32_t>(float(INT32_MAX)));
+static_assert(!float_is_binary32 || in_range<float>(INT32_MIN));
+static_assert(!float_is_binary32 || in_range<float>(INT32_MAX));
 static_assert(!double_is_binary64 || in_range<int32_t>(double(INT32_MIN)));
 static_assert(!double_is_binary64 || in_range<int32_t>(double(INT32_MAX)));
+static_assert(!double_is_binary64 || in_range<double>(INT32_MIN));
+static_assert(!double_is_binary64 || in_range<double>(INT32_MAX));
 #endif
 #ifdef INT64_MAX
 static_assert(!float_is_binary32 || in_range<int64_t>(float(INT64_MIN)));
 static_assert(!float_is_binary32 || !in_range<int64_t>(float(INT64_MAX)));
+static_assert(!float_is_binary32 || in_range<float>(INT64_MIN));
+static_assert(!float_is_binary32 || in_range<float>(INT64_MAX));
 static_assert(!double_is_binary64 || in_range<int64_t>(double(INT64_MIN)));
 static_assert(!double_is_binary64 || !in_range<int64_t>(double(INT64_MAX)));
+static_assert(!double_is_binary64 || in_range<double>(INT64_MIN));
+static_assert(!double_is_binary64 || in_range<double>(INT64_MAX));
 #endif
-static_assert(!(float_is_binary32 && double_is_binary64) || in_range<double>(FLT_MAX));
+static_assert(!(float_is_binary32 && double_is_binary64) || in_range<float>(FLT_MAX));
 static_assert(!(float_is_binary32 && double_is_binary64) || !in_range<float>(DBL_MAX));
+static_assert(!(float_is_binary32 && double_is_binary64) || !in_range<float>(double(FLT_MAX) * (1.0 + DBL_EPSILON)));
 
 } // namespace detail
 } // namespace in_range_ext
